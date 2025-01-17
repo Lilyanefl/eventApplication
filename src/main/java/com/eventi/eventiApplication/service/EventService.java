@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,8 +23,9 @@ public class EventService {
         return eventRepository.findAll();
     }
 
-    public Optional<Event> findEventById(Long id) {
-        return eventRepository.findById(id);
+    public Event findEventById(Long id) {
+        return eventRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Evento non trovato"));
     }
 
     public Event saveEvent(Event event, String token) {
@@ -34,39 +35,31 @@ public class EventService {
     }
 
     public void deleteEvent(Long id) {
-        eventRepository.deleteById(id);
+        Event event = findEventById(id);
+        eventRepository.delete(event);
     }
 
     public Event addAttendeeToEvent(Long eventId, String username) {
-        Optional<Event> optionalEvent = eventRepository.findById(eventId);
-        if (optionalEvent.isPresent()) {
-            Event event = optionalEvent.get();
-            if (event.getAvailableSeats() > 0) {
-                event.getAttendees().add(username);
-                event.setAvailableSeats(event.getAvailableSeats() - 1);
-                return eventRepository.save(event);
-            } else {
-                throw new RuntimeException("Posti finiti per questo evento");
-            }
-        } else {
-            throw new RuntimeException("Evento non trovato");
+        Event event = findEventById(eventId);
+        if (event.getAvailableSeats() <= 0) {
+            throw new IllegalStateException("Posti finiti per questo evento");
         }
+        if (event.getAttendees().contains(username)) {
+            throw new IllegalStateException("Sei già registrato a questo evento");
+        }
+        event.getAttendees().add(username);
+        event.setAvailableSeats(event.getAvailableSeats() - 1);
+        return eventRepository.save(event);
     }
 
     public Event removeAttendeeFromEvent(Long eventId, String username) {
-        Optional<Event> optionalEvent = eventRepository.findById(eventId);
-        if (optionalEvent.isPresent()) {
-            Event event = optionalEvent.get();
-            if (event.getAttendees().contains(username)) {
-                event.getAttendees().remove(username);
-                event.setAvailableSeats(event.getAvailableSeats() + 1);
-                return eventRepository.save(event);
-            } else {
-                throw new RuntimeException("L'utente non è registrato per questo evento");
-            }
-        } else {
-            throw new RuntimeException("Evento non trovato");
+        Event event = findEventById(eventId);
+        if (!event.getAttendees().contains(username)) {
+            throw new IllegalStateException("L'utente non è registrato per questo evento");
         }
+        event.getAttendees().remove(username);
+        event.setAvailableSeats(event.getAvailableSeats() + 1);
+        return eventRepository.save(event);
     }
 
     public List<Event> findEventsByUser(String username) {
